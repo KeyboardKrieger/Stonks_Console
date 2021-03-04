@@ -1,6 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using ServiceStack.Text;
+using System.Linq;
+using System.Collections.Generic;
+using System.Collections;
 
 namespace StonksConsole
 {
@@ -8,70 +10,162 @@ namespace StonksConsole
     {
         static void Main(string[] args)
         {
-            AlphaVantageSDK alpha = new AlphaVantageSDK();
-            var prices = alpha.GetDailyPriceData("IBM");
-            prices.PrintDump();
-            List<Schueler> schl = new List<Schueler>()
+            StockTrading stonks = new StockTrading();
+            Console.WriteLine("FreeMoney:" + stonks.User.FreeMoney);
+            Console.WriteLine();
+
+            stonks.BuyStock("AMZN", 1000);
+            stonks.BuyStock("FB", 5000);
+            stonks.BuyStock("AMZN", 500);
+            Console.WriteLine("FreeMoney:" + stonks.User.FreeMoney);
+            foreach (var entry in stonks.User.Entries)
             {
-                new Schueler("fafas", "13", prices[0]),
-                new Schueler("fafas", "13", prices[1])
-            };
-            schl.PrintDump();
+                Console.WriteLine(entry.Stock.Symbol+": "+ entry.GetActualValue());
+            }
+            Console.WriteLine();
+
+            stonks.SellStock(stonks.User.Entries.First().Id);
+            Console.WriteLine("FreeMoney:"+stonks.User.FreeMoney);
+            foreach (var entry in stonks.User.Entries)
+            {
+                Console.WriteLine(entry.Stock.Symbol + ": " + entry.GetActualValue());
+            }
+            Console.WriteLine();
 
             Console.ReadKey();
         }
     }
-    class Schueler
+    public class StockTrading
     {
-        public Schueler(string n, string k, StockPriceData stock)
-        {
-            name = n;
-            klasse = k;
-            stocks = stock;
-        }
-        public string name { get; set; }
-        public StockPriceData stocks { get; set;}
-        public string klasse { get; set; }
-    }
-    class LineCalculator
-    {
-        public List<Line> Lines = new List<Line>();
-        public void AddLine(Vector2 startPoint, float rise)
-        {
-            if (Lines == null)
-                Lines = new List<Line>();
+        public AvailableStocks Stocks;
+        public Portfolio User;
 
-            Lines.Add(new Line(startPoint, rise));
-        }
-        public IEnumerator<float> GetYValues(float x)
+        public StockTrading()
         {
-            foreach (var line in Lines)
+            Stocks = new AvailableStocks();
+            User = new Portfolio();
+        }
+        public void BuyStock(string symbol, float value)
+        {
+            var stock = Stocks.GetStock(symbol);
+            if (stock == null)
+                return;
+
+            User.BuyStock(stock, value);
+        }
+        public void SellStock(Guid id)
+        {
+            User.SellStock(id);
+        }
+    }
+    public class Portfolio
+    {
+        public float FreeMoney { get; private set; }
+        public List<PortfolioEntry> Entries { get; private set; }
+        public Portfolio(float startMoney = 10000)
+        {
+            Entries = new List<PortfolioEntry>();
+            FreeMoney = startMoney;
+        }
+        public float GetBalance()
+        {
+            var balance = FreeMoney;
+            foreach (var entry in Entries)
             {
-                yield return line.GetYforX(x);
+                balance += entry.GetActualValue();
+            }
+            return balance;
+        }
+        public void AddMoney(float money)
+        {
+            if (money < 0)
+                return;
+
+            FreeMoney += money;
+        }
+        public void TakeMoney(float money)
+        {
+            if (money < 0)
+                return;
+
+            FreeMoney -= money;
+        }
+        public void BuyStock(Stock stock, float value)
+        {
+            if (FreeMoney < value)
+                return;
+
+            var count = value / stock.ActualPrice;
+            Entries.Add(new PortfolioEntry(stock, count));
+            FreeMoney -= value;
+        }
+        public void SellStock(Guid id)
+        {
+            var entrieWithStock = Entries.First(x => x.Id == id);
+            if (entrieWithStock == null)
+                return;
+
+            FreeMoney += entrieWithStock.GetActualValue();
+            Entries.Remove(entrieWithStock);
+        }
+    }
+    public class PortfolioEntry
+    {
+        public Guid Id { get; private set; }
+        public Stock Stock { get; private set; }
+        DateTime BuyDate;
+        float BuyPrice;
+        float StockCount;
+
+        public PortfolioEntry(Stock stock, float count)
+        {
+            Id = Guid.NewGuid();
+            Stock = stock;
+            BuyDate = DateTime.Today;
+            BuyPrice = stock.ActualPrice;
+            StockCount = count;
+        }
+        public float GetActualValue()
+        {
+            return Stock.ActualPrice * StockCount;
+        }
+    }
+    public class AvailableStocks
+    {
+        HashSet<Stock> Stocks;
+        public AvailableStocks()
+        {
+            Stocks = new HashSet<Stock>();
+            List<String> symbols = new List<string>()
+            {
+                "AMZN","FB"
+            };
+
+            foreach (var symbol in symbols)
+            {
+
+                Stocks.Add(new Stock(symbol));
             }
         }
-    }
-    class Line
-    {
-        private Vector2 StartPoint;
-        private float Rise;
-
-        public Line(Vector2 startPoint, float rise)
+        public Stock GetStock(string symbol)
         {
-            StartPoint = startPoint;
-            Rise = rise;
-        }
-        public float GetYforX(float x)
-        {
-            var xDistance = x - StartPoint.X;
-            float yValue = xDistance * Rise + StartPoint.Y;
+            if (symbol == null)
+                return null;
 
-            return yValue;
+            return Stocks.First(x => x.Symbol == symbol);
         }
     }
-    class Vector2
+    public class Stock
     {
-        public float X;
-        public float Y;
+        public string Symbol { get; private set; }
+        public float ActualPrice { get; private set; }
+        public List<StockPriceData> PriceData { get; private set; }
+        public Stock(string symbol)
+        {
+            AlphaVantageSDK sdk = new AlphaVantageSDK();
+            Symbol = symbol;
+            PriceData = sdk.GetDailyPriceData(symbol);
+            ActualPrice = PriceData.OrderBy(x => x.Timestamp).First().Close;
+        }
     }
 }
