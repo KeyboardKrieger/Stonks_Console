@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using ServiceStack;
 
-namespace StonksConsole
+namespace StonksLibrary
 {
     class AlphaVantageSDK
     {

@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace StonksConsole
+namespace StonksLibrary
 {
     public class StockPriceData
     {

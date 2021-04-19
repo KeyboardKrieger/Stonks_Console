@@ -1,4 +1,4 @@
-﻿namespace StonksConsole
+﻿namespace StonksLibrary
 {
     struct Vector2
     {
